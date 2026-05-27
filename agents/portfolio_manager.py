@@ -213,10 +213,13 @@ Return your decisions as JSON only."""
             if recs:
                 sections.append("Recommendations:")
                 for r in recs:
-                    sections.append(
-                        f"  {r.get('ticker','?')} → {r.get('action','?')} "
-                        f"[{r.get('conviction','?')}]: {r.get('rationale','')}"
-                    )
+                    if isinstance(r, dict):
+                        sections.append(
+                            f"  {r.get('ticker','?')} → {r.get('action','?')} "
+                            f"[{r.get('conviction','?')}]: {r.get('rationale','')}"
+                        )
+                    else:
+                        sections.append(f"  {r}")
             risks = report.get("risks", [])
             if risks:
                 sections.append(f"Key risks: {'; '.join(risks[:3])}")

@@ -5,9 +5,13 @@ All tuneable parameters live here so nothing is scattered through the codebase.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
+
+# Load .env file if present — safe to call even if the file doesn't exist
+load_dotenv(BASE_DIR / ".env")
 DATA_DIR = BASE_DIR / "data"
 HISTORICAL_DIR = DATA_DIR / "historical"
 PORTFOLIO_FILE = DATA_DIR / "portfolio.json"

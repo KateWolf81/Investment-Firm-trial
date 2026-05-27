@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Briefing — {{ date }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; color: #222; font-size: 14px; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+    /* Header */
+    .header { background: #1a1f36; color: white; padding: 24px 32px; border-radius: 8px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { font-size: 22px; font-weight: 700; }
+    .header .meta { font-size: 12px; color: #aab; text-align: right; }
+
+    /* NAV bar */
+    .nav-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .nav-card { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .nav-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 6px; }
+    .nav-card .value { font-size: 22px; font-weight: 700; }
+    .nav-card .sub { font-size: 12px; color: #888; margin-top: 2px; }
+    .positive { color: #16a34a; }
+    .negative { color: #dc2626; }
+    .neutral { color: #2563eb; }
+
+    /* Section */
+    .section { background: white; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .section h2 { font-size: 16px; font-weight: 700; margin-bottom: 14px; border-bottom: 2px solid #f0f0f0; padding-bottom: 8px; }
+    .section h3 { font-size: 13px; font-weight: 600; color: #555; margin: 12px 0 6px; }
+
+    /* Executive summary */
+    .exec-summary { font-size: 15px; line-height: 1.6; color: #333; margin-bottom: 12px; }
+
+    /* Decisions table */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f8f9fb; text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #666; border-bottom: 2px solid #e8eaed; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+
+    /* Action badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .badge-BUY { background: #dcfce7; color: #16a34a; }
+    .badge-SELL { background: #fee2e2; color: #dc2626; }
+    .badge-HOLD { background: #f0f9ff; color: #0369a1; }
+    .badge-INVESTIGATE { background: #fef3c7; color: #b45309; }
+    .badge-HIGH { background: #fde68a; color: #92400e; }
+    .badge-MEDIUM { background: #e0f2fe; color: #0369a1; }
+    .badge-LOW { background: #f0fdf4; color: #166534; }
+
+    /* Risk level */
+    .risk-LOW { color: #16a34a; font-weight: 700; }
+    .risk-MEDIUM { color: #d97706; font-weight: 700; }
+    .risk-HIGH { color: #dc2626; font-weight: 700; }
+    .risk-CRITICAL { color: #dc2626; font-weight: 700; background: #fee2e2; padding: 2px 6px; border-radius: 4px; }
+
+    /* Analyst grid */
+    .analyst-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .analyst-card { border: 1px solid #e8eaed; border-radius: 6px; padding: 14px; }
+    .analyst-card .agent-name { font-size: 12px; font-weight: 700; color: #1a1f36; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+    .analyst-card .summary { font-size: 13px; color: #444; line-height: 1.5; margin-bottom: 8px; }
+    .analyst-card ul { list-style: none; padding: 0; }
+    .analyst-card ul li { font-size: 12px; color: #555; padding: 2px 0; padding-left: 12px; position: relative; }
+    .analyst-card ul li::before { content: '›'; position: absolute; left: 0; color: #888; }
+
+    /* Risk dashboard */
+    .breach { background: #fef2f2; border-left: 3px solid #dc2626; padding: 8px 12px; margin: 6px 0; border-radius: 0 4px 4px 0; font-size: 13px; }
+    .breach .breach-type { font-weight: 700; color: #dc2626; font-size: 11px; text-transform: uppercase; }
+
+    /* Holdings table */
+    .pct-bar { height: 6px; background: #e8eaed; border-radius: 3px; width: 100px; display: inline-block; vertical-align: middle; margin-left: 8px; }
+    .pct-bar-fill { height: 100%; border-radius: 3px; background: #2563eb; }
+    .pct-bar-fill.warning { background: #f59e0b; }
+    .pct-bar-fill.danger { background: #dc2626; }
+
+    /* Watchlist */
+    .watchlist { list-style: none; }
+    .watchlist li { padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+    .watchlist li:last-child { border-bottom: none; }
+
+    /* Footer */
+    .footer { text-align: center; color: #aaa; font-size: 11px; margin-top: 32px; padding: 16px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>Investment Firm — Daily Briefing</h1>
+      <div style="color:#aab; font-size:13px; margin-top:4px;">{{ date }} &nbsp;|&nbsp; Paper Portfolio Simulation</div>
+    </div>
+    <div class="meta">
+      Base currency: GBP<br>
+      Benchmark: {{ benchmark_ticker }}<br>
+      Generated: {{ generated_at }}
+    </div>
+  </div>
+
+  <!-- NAV Summary -->
+  <div class="nav-bar">
+    <div class="nav-card">
+      <div class="label">Portfolio NAV</div>
+      <div class="value">{{ nav_gbp }}</div>
+      <div class="sub">Starting: {{ starting_capital }}</div>
+    </div>
+    <div class="nav-card">
+      <div class="label">P&amp;L (inception)</div>
+      <div class="value {{ pnl_class }}">{{ pnl_gbp }}</div>
+      <div class="sub {{ pnl_class }}">{{ pnl_pct }}</div>
+    </div>
+    <div class="nav-card">
+      <div class="label">vs Benchmark ({{ benchmark_ticker }})</div>
+      <div class="value {{ alpha_class }}">{{ alpha_pp }}</div>
+      <div class="sub">Benchmark: {{ benchmark_return }}</div>
+    </div>
+    <div class="nav-card">
+      <div class="label">Cash Available</div>
+      <div class="value neutral">{{ cash_gbp }}</div>
+      <div class="sub">{{ cash_pct }} of NAV</div>
+    </div>
+  </div>
+
+  <!-- Executive Summary -->
+  <div class="section">
+    <h2>Portfolio Manager — Executive Summary</h2>
+    <div class="exec-summary">{{ pm_executive_summary }}</div>
+    {% if pm_market_context %}
+    <div style="font-size:13px; color:#666; font-style:italic;">{{ pm_market_context }}</div>
+    {% endif %}
+  </div>
+
+  <!-- PM Decisions -->
+  {% if pm_decisions %}
+  <div class="section">
+    <h2>Today's Decisions</h2>
+    <table>
+      <tr>
+        <th>Ticker</th>
+        <th>Action</th>
+        <th>Size</th>
+        <th>Conviction</th>
+        <th>Rationale</th>
+        <th>Key Risk</th>
+      </tr>
+      {% for d in pm_decisions %}
+      <tr>
+        <td><strong>{{ d.ticker }}</strong></td>
+        <td><span class="badge badge-{{ d.action }}">{{ d.action }}</span></td>
+        <td>{{ "%.1f%%"|format(d.size_pct_of_nav) }} of NAV</td>
+        <td><span class="badge badge-{{ d.conviction }}">{{ d.conviction }}</span></td>
+        <td style="max-width:320px;">{{ d.rationale }}</td>
+        <td style="max-width:200px; color:#888;">{{ d.key_risk }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Current Holdings -->
+  {% if positions %}
+  <div class="section">
+    <h2>Current Holdings</h2>
+    <table>
+      <tr>
+        <th>Ticker</th>
+        <th>Shares</th>
+        <th>Avg Cost (GBP)</th>
+        <th>Last Price (GBP)</th>
+        <th>Market Value</th>
+        <th>Weight</th>
+        <th>Unrealised P&amp;L</th>
+      </tr>
+      {% for p in positions %}
+      <tr>
+        <td><strong>{{ p.ticker }}</strong></td>
+        <td>{{ p.shares }}</td>
+        <td>{{ p.avg_cost_gbp }}</td>
+        <td>{{ p.last_price_gbp }}</td>
+        <td>{{ p.market_value_gbp }}</td>
+        <td>
+          {{ p.weight_pct }}
+          <span class="pct-bar"><span class="pct-bar-fill {% if p.weight_raw > 10 %}danger{% elif p.weight_raw > 7 %}warning{% endif %}" style="width:{{ [p.weight_raw * 5, 100]|min }}%"></span></span>
+        </td>
+        <td class="{% if p.pnl_raw >= 0 %}positive{% else %}negative{% endif %}">{{ p.unrealised_pnl }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Risk Dashboard -->
+  <div class="section">
+    <h2>Risk Dashboard</h2>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+      <div>
+        <h3>Overall Risk Level</h3>
+        <div style="font-size:24px;" class="risk-{{ risk_level }}">{{ risk_level }}</div>
+        <p style="font-size:13px; color:#555; margin-top:6px;">{{ risk_summary }}</p>
+        {% if risk_breaches %}
+        <h3 style="margin-top:14px;">Breaches</h3>
+        {% for b in risk_breaches %}
+        <div class="breach">
+          <div class="breach-type">{{ b.type }} — {{ b.ticker_or_currency }}</div>
+          {{ b.current_value }} (limit: {{ b.limit }})
+          {% if b.action_required %}<div style="margin-top:2px; color:#555;">→ {{ b.action_required }}</div>{% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="font-size:13px; color:#16a34a; margin-top:8px;">✓ No risk limit breaches detected.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3>Currency Exposure</h3>
+        <table>
+          <tr><th>Currency</th><th>Exposure</th></tr>
+          {% for ccy, pct in fx_exposure.items() %}
+          <tr>
+            <td>{{ ccy }}</td>
+            <td>{{ "%.1f%%"|format(pct) }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        <h3 style="margin-top:14px;">Speculative Weight</h3>
+        <div style="font-size:18px; font-weight:700; {% if speculative_pct > 30 %}color:#dc2626{% else %}color:#2563eb{% endif %}">
+          {{ "%.1f%%"|format(speculative_pct) }}
+        </div>
+        <div style="font-size:12px; color:#888;">Limit: 30% (pre-revenue companies)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analyst Reports -->
+  <div class="section">
+    <h2>Analyst Reports</h2>
+    <div class="analyst-grid">
+      {% for report in analyst_reports %}
+      <div class="analyst-card">
+        <div class="agent-name">{{ report.agent }}</div>
+        <div class="summary">{{ report.summary }}</div>
+        {% if report.observations %}
+        <ul>
+          {% for obs in report.observations[:3] %}
+          <li>{{ obs }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% if report.recommendations %}
+        <div style="margin-top:8px;">
+          {% for r in report.recommendations %}
+          <span class="badge badge-{{ r.action }}" style="margin-right:4px;">{{ r.ticker }} {{ r.action }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Watchlist -->
+  {% if pm_watchlist %}
+  <div class="section">
+    <h2>Watchlist</h2>
+    <ul class="watchlist">
+      {% for item in pm_watchlist %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- Outlook -->
+  {% if pm_outlook %}
+  <div class="section">
+    <h2>5–10 Day Outlook</h2>
+    <p style="font-size:14px; line-height:1.6;">{{ pm_outlook }}</p>
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    Investment Firm Simulation &nbsp;·&nbsp; Paper trading only — not financial advice &nbsp;·&nbsp; {{ date }}
+  </div>
+
+</div>
+</body>
+</html>

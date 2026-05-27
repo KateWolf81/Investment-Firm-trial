@@ -1,0 +1,115 @@
+{
+  "equities": [
+    {
+      "ticker": "PYC.AX",
+      "name": "PYC Therapeutics",
+      "currency": "AUD",
+      "exchange": "ASX",
+      "sector": "Biotech",
+      "region": "Australia",
+      "notes": "RNA therapeutics — high exposure speculative biotech"
+    },
+    {
+      "ticker": "BTR.AX",
+      "name": "Brightstar Resources",
+      "currency": "AUD",
+      "exchange": "ASX",
+      "sector": "Mining",
+      "region": "Australia",
+      "notes": "Speculative ASX position"
+    },
+    {
+      "ticker": "OKLO",
+      "name": "Oklo Inc",
+      "currency": "USD",
+      "exchange": "NYSE",
+      "sector": "Nuclear Energy",
+      "region": "US",
+      "notes": "Small modular reactor — pre-revenue, regulatory-driven"
+    },
+    {
+      "ticker": "SMR",
+      "name": "NuScale Power",
+      "currency": "USD",
+      "exchange": "NYSE",
+      "sector": "Nuclear Energy",
+      "region": "US",
+      "notes": "Small modular reactor — NRC approved design"
+    },
+    {
+      "ticker": "IONQ",
+      "name": "IonQ Inc",
+      "currency": "USD",
+      "exchange": "NYSE",
+      "sector": "Quantum Computing",
+      "region": "US",
+      "notes": "Trapped-ion quantum computing"
+    },
+    {
+      "ticker": "GOOGL",
+      "name": "Alphabet Inc",
+      "currency": "USD",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "region": "US",
+      "notes": "Large-cap AI and cloud"
+    },
+    {
+      "ticker": "NVDA",
+      "name": "NVIDIA Corporation",
+      "currency": "USD",
+      "exchange": "NASDAQ",
+      "sector": "Technology",
+      "region": "US",
+      "notes": "AI infrastructure / GPU leader"
+    }
+  ],
+  "etfs": [
+    {
+      "ticker": "SEMG.L",
+      "name": "Amundi MSCI Semiconductors ETF Acc GBP",
+      "currency": "GBP",
+      "exchange": "LSE",
+      "sector": "Semiconductors",
+      "region": "Global"
+    },
+    {
+      "ticker": "AINF.L",
+      "name": "iShares AI Infrastructure ETF USD Acc GBP",
+      "currency": "GBP",
+      "exchange": "LSE",
+      "sector": "AI Infrastructure",
+      "region": "Global"
+    },
+    {
+      "ticker": "RBOT.L",
+      "name": "iShares Automation & Robotics ETF USD Acc GBP",
+      "currency": "GBP",
+      "exchange": "LSE",
+      "sector": "Robotics",
+      "region": "Global"
+    },
+    {
+      "ticker": "CNDX.L",
+      "name": "iShares NASDAQ 100 ETF USD Acc GBP",
+      "currency": "GBP",
+      "exchange": "LSE",
+      "sector": "Technology",
+      "region": "US",
+      "notes": "Verify ticker CNDX.L matches your broker holding"
+    },
+    {
+      "ticker": "IITU.L",
+      "name": "iShares S&P500 Info Tech Sector ETF Acc GBP",
+      "currency": "GBP",
+      "exchange": "LSE",
+      "sector": "Technology",
+      "region": "US"
+    }
+  ],
+  "benchmark": {
+    "ticker": "IWDA.L",
+    "name": "iShares Core MSCI World ETF",
+    "currency": "GBP"
+  }
+}

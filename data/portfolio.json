@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "created": "2026-05-27",
+    "base_currency": "GBP",
+    "starting_capital": 100000.0
+  },
+  "cash_gbp": 100000.0,
+  "positions": {},
+  "nav_history": [
+    {
+      "date": "2026-05-27",
+      "nav_gbp": 100000.0,
+      "benchmark_price": null,
+      "benchmark_return_pct": 0.0,
+      "portfolio_return_pct": 0.0
+    }
+  ]
+}

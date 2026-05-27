@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+data/historical/
+data/decisions_log.jsonl
+data/benchmark_state.json
+reports/output/

@@ -86,21 +86,29 @@ class BaseAgent(ABC):
         Extract a JSON block from Claude's response.
         Claude is instructed to return JSON; this extracts it robustly.
         """
-        # Try to find a ```json ... ``` block first
-        if "```json" in raw:
-            start = raw.index("```json") + 7
-            end = raw.index("```", start)
-            raw = raw[start:end].strip()
-        elif "```" in raw:
-            start = raw.index("```") + 3
-            end = raw.index("```", start)
-            raw = raw[start:end].strip()
+        candidate = raw
+        try:
+            if "```json" in raw:
+                start = raw.index("```json") + 7
+                end = raw.index("```", start)
+                candidate = raw[start:end].strip()
+            elif "```" in raw:
+                start = raw.index("```") + 3
+                end = raw.index("```", start)
+                candidate = raw[start:end].strip()
+        except ValueError:
+            # No proper closing fence — fall through and try parsing as-is
+            candidate = raw
+
+        # Strip any leading/trailing prose outside the JSON object
+        brace = candidate.find("{")
+        if brace > 0:
+            candidate = candidate[brace:]
 
         try:
-            return json.loads(raw)
+            return json.loads(candidate)
         except json.JSONDecodeError as exc:
             logger.warning(f"[{self.name}] Could not parse JSON response: {exc}")
-            # Return a minimal valid structure rather than crashing
             return {
                 "summary": "Parse error — see raw_response",
                 "observations": [],

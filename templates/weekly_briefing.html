@@ -138,6 +138,37 @@
     {% endif %}
   </div>
 
+  <!-- Weekly Summary: price, gains, target price, call, and change vs last week -->
+  {% if weekly_summary %}
+  <div class="section">
+    <h2>This Week at a Glance</h2>
+    <table>
+      <tr>
+        <th>Ticker</th>
+        <th>Price</th>
+        <th>This Week</th>
+        <th>3M Call</th>
+        <th>Target Price</th>
+        <th>vs Last Week</th>
+        <th>Thesis</th>
+      </tr>
+      {% for s in weekly_summary %}
+      <tr>
+        <td><strong>{{ s.ticker }}</strong></td>
+        <td>{{ s.current_price }}</td>
+        <td class="{% if s.change_this_week_pct is not none and s.change_this_week_pct >= 0 %}positive{% elif s.change_this_week_pct is not none %}negative{% endif %}">
+          {% if s.change_this_week_pct is not none %}{{ "%+.2f%%"|format(s.change_this_week_pct) }}{% else %}N/A{% endif %}
+        </td>
+        <td><span class="badge badge-{{ s.action }}">{{ s.action }}</span></td>
+        <td>{{ s.target_price }}</td>
+        <td style="font-size:12px; color:#555;">{{ s.vs_last_week }}</td>
+        <td style="max-width:320px; font-size:13px;">{{ s.thesis }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
   <!-- PM Decisions -->
   {% if pm_decisions %}
   <div class="section">

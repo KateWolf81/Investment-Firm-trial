@@ -16,6 +16,7 @@ DATA_DIR = BASE_DIR / "data"
 HISTORICAL_DIR = DATA_DIR / "historical"
 PORTFOLIO_FILE = DATA_DIR / "portfolio.json"
 DECISIONS_LOG_FILE = DATA_DIR / "decisions_log.jsonl"
+LAST_HOLDINGS_REVIEW_FILE = DATA_DIR / "last_holdings_review.json"
 REPORTS_DIR = BASE_DIR / "reports" / "output"
 TEMPLATES_DIR = BASE_DIR / "templates"
 

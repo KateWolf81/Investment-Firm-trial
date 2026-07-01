@@ -178,7 +178,7 @@ def run_weekly_review(dry_run: bool = True) -> Path:
 
     # ── Step 7: Generate HTML report ──────────────────────────────────────────
     logger.info("Generating weekly briefing report...")
-    report_path = generate_briefing(analyst_reports, pm_report, risk_report)
+    report_path = generate_briefing(analyst_reports, pm_report, risk_report, market_data)
 
     print(f"\n{'='*60}")
     print(f"Weekly review complete.")

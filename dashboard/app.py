@@ -91,22 +91,61 @@ if "holdings_rows" not in st.session_state:
 
 import pandas as pd  # noqa: E402
 
+
+@st.cache_data(ttl=300, show_spinner="Fetching live prices...")
+def _fetch_price_snapshot(tickers: tuple) -> dict:
+    from engine.market_data import get_price_summary
+    snapshot = {}
+    for ticker in tickers:
+        s = get_price_summary(ticker)
+        snapshot[ticker] = {
+            "price": s.get("latest_close") if s.get("data_available") else None,
+            "chg_this_week_pct": s.get("change_5d_pct") if s.get("data_available") else None,
+        }
+    return snapshot
+
+
+rows = st.session_state["holdings_rows"]
+tickers = tuple(sorted({str(r.get("ticker", "")).strip().upper() for r in rows if r.get("ticker")}))
+
+refresh_col, _ = st.columns([1, 5])
+with refresh_col:
+    if st.button("🔄 Refresh prices"):
+        _fetch_price_snapshot.clear()
+
+price_snapshot = _fetch_price_snapshot(tickers) if tickers else {}
+
+display_rows = []
+for row in rows:
+    ticker = str(row.get("ticker", "")).strip().upper()
+    p = price_snapshot.get(ticker, {})
+    merged = dict(row)
+    merged["price"] = p.get("price")
+    merged["chg_this_week_pct"] = p.get("chg_this_week_pct")
+    display_rows.append(merged)
+
+DISPLAY_COLUMNS = ["ticker", "price", "chg_this_week_pct"] + [c for c in COLUMNS if c != "ticker"] + ["type"]
+
 edited_df = st.data_editor(
-    pd.DataFrame(st.session_state["holdings_rows"]),
+    pd.DataFrame(display_rows, columns=DISPLAY_COLUMNS),
     num_rows="dynamic",
     use_container_width=True,
     column_config={
         "type": st.column_config.SelectboxColumn(options=["equity", "etf"]),
+        "price": st.column_config.NumberColumn("Price", disabled=True, format="%.4f"),
+        "chg_this_week_pct": st.column_config.NumberColumn("This Week", disabled=True, format="%+.2f%%"),
     },
     key="holdings_editor",
 )
+st.caption("Price / This Week are live from Yahoo Finance (cached 5 min) — not editable, and not saved to holdings.")
 
 col1, col2 = st.columns([1, 4])
 with col1:
     if st.button("💾 Save holdings", use_container_width=True):
-        new_holdings = _rows_to_holdings(edited_df.to_dict("records"), current.get("benchmark", {}))
+        rows_to_save = edited_df[COLUMNS + ["type"]].to_dict("records")
+        new_holdings = _rows_to_holdings(rows_to_save, current.get("benchmark", {}))
         save_holdings(new_holdings, HOLDINGS_FILE)
-        st.session_state["holdings_rows"] = edited_df.to_dict("records")
+        st.session_state["holdings_rows"] = rows_to_save
         st.success(f"Saved {len(new_holdings['equities']) + len(new_holdings['etfs'])} holdings.")
 
 st.divider()

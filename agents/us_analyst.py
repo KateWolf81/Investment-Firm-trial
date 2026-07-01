@@ -70,21 +70,18 @@ Return your analysis as JSON only."""
 
 class USAnalyst(BaseAgent):
     name = "US Analyst"
-    role_description = "Covers OKLO, SMR, IONQ, GOOGL, NVDA and US-focused ETFs"
-
-    US_TICKERS = {"OKLO", "SMR", "IONQ", "GOOGL", "NVDA"}
+    role_description = "Covers US-region holdings (equities and US-focused ETFs)"
 
     def analyse(self, market_data: dict) -> dict:
         from datetime import datetime
         from engine.market_data import fetch_fx_rates
+        from config.holdings import tickers_by_region
 
         fx = fetch_fx_rates()
         usd_gbp = fx.get("USD", "N/A")
 
-        us_data = {
-            k: v for k, v in market_data.items()
-            if k in self.US_TICKERS or k.endswith(".L")
-        }
+        us_tickers = set(tickers_by_region("US"))
+        us_data = {k: v for k, v in market_data.items() if k in us_tickers}
         price_str = self._format_price_data(us_data)
 
         user_prompt = USER_PROMPT_TEMPLATE.format(

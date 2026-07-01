@@ -51,7 +51,7 @@ def check_environment() -> bool:
     return True
 
 
-def run_weekly_review(dry_run: bool = True) -> None:
+def run_weekly_review(dry_run: bool = True) -> Path:
     """Run the full weekly review — fetch data, run all agents, generate report."""
     from engine.market_data import fetch_all_holdings, get_price_summary
     from engine.simulation import calculate_nav, record_nav_snapshot
@@ -188,6 +188,8 @@ def run_weekly_review(dry_run: bool = True) -> None:
         print(f"Alpha:  {bm['alpha_pp']:+.2f}pp vs {bm['ticker']}")
     print(f"{'='*60}\n")
 
+    return report_path
+
 
 def run_single_agent(agent_name: str) -> None:
     """Run a single analyst agent for testing purposes."""
@@ -248,14 +250,8 @@ def run_backtest() -> None:
 
 def _all_tickers() -> list[str]:
     """Return all tracked tickers from holdings.json."""
-    import json
-    from config.settings import BASE_DIR
-    with open(BASE_DIR / "config" / "holdings.json") as f:
-        h = json.load(f)
-    return (
-        [x["ticker"] for x in h.get("equities", [])]
-        + [x["ticker"] for x in h.get("etfs", [])]
-    )
+    from config.holdings import all_tickers
+    return all_tickers()
 
 
 if __name__ == "__main__":

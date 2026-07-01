@@ -79,13 +79,15 @@ Return your analysis as JSON only."""
 
 class BiotechAnalyst(BaseAgent):
     name = "Biotech Analyst"
-    role_description = "Deep specialist on PYC.AX — RNA therapeutics and regulatory catalysts"
+    role_description = "Covers Biotech sector holdings — RNA therapeutics and regulatory catalysts"
 
     def analyse(self, market_data: dict) -> dict:
         from datetime import datetime
+        from config.holdings import tickers_by_sector
 
-        pyc_data = {k: v for k, v in market_data.items() if "PYC" in k}
-        price_str = self._format_price_data(pyc_data)
+        biotech_tickers = set(tickers_by_sector({"Biotech"}))
+        biotech_data = {k: v for k, v in market_data.items() if k in biotech_tickers}
+        price_str = self._format_price_data(biotech_data)
 
         user_prompt = USER_PROMPT_TEMPLATE.format(
             date=datetime.now().date().isoformat(),

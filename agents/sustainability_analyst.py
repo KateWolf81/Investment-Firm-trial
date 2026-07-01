@@ -92,16 +92,12 @@ class SustainabilityAnalyst(BaseAgent):
     name = "Sustainability Analyst"
     role_description = "ESG regulation, carbon markets, water, biodiversity, green finance"
 
-    PORTFOLIO_TICKERS = [
-        "PYC.AX", "BTR.AX", "OKLO", "SMR", "IONQ", "GOOGL", "NVDA",
-        "SEMG.L", "AINF.L", "RBOT.L", "CNDX.L", "IITU.L",
-    ]
-
     def analyse(self, market_data: dict) -> dict:
         from datetime import datetime
+        from config.holdings import all_tickers
 
         holdings_lines = []
-        for ticker in self.PORTFOLIO_TICKERS:
+        for ticker in all_tickers():
             if ticker in market_data and market_data[ticker].get("data_available"):
                 d = market_data[ticker]
                 holdings_lines.append(

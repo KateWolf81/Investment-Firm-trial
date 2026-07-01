@@ -83,18 +83,18 @@ Return your analysis as JSON only."""
 
 class NuclearEnergyAnalyst(BaseAgent):
     name = "Nuclear & Energy Analyst"
-    role_description = "Covers OKLO and SMR; SMR regulatory and energy transition thesis"
-
-    NUCLEAR_TICKERS = {"OKLO", "SMR"}
+    role_description = "Covers Nuclear Energy sector holdings; SMR regulatory and energy transition thesis"
 
     def analyse(self, market_data: dict) -> dict:
         from datetime import datetime
         from engine.market_data import fetch_fx_rates
+        from config.holdings import tickers_by_sector
 
         fx = fetch_fx_rates()
         usd_gbp = fx.get("USD", "N/A")
 
-        nuclear_data = {k: v for k, v in market_data.items() if k in self.NUCLEAR_TICKERS}
+        nuclear_tickers = set(tickers_by_sector({"Nuclear Energy"}))
+        nuclear_data = {k: v for k, v in market_data.items() if k in nuclear_tickers}
         price_str = self._format_price_data(nuclear_data)
 
         user_prompt = USER_PROMPT_TEMPLATE.format(

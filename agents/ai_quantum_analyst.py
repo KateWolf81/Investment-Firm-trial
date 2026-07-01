@@ -83,17 +83,19 @@ Please provide this week's AI & quantum review. Consider:
 
 Return your analysis as JSON only."""
 
-AI_QUANTUM_TICKERS = {"IONQ", "AINF.L", "RBOT.L", "SEMG.L", "CNDX.L", "IITU.L", "NVDA", "GOOGL"}
+AI_QUANTUM_SECTORS = {"Quantum Computing", "AI Infrastructure", "Robotics", "Semiconductors", "Technology"}
 
 
 class AIQuantumAnalyst(BaseAgent):
     name = "AI & Quantum Analyst"
-    role_description = "Covers IONQ, robotics, AI infrastructure, and semiconductor ETFs"
+    role_description = "Covers quantum computing, robotics, AI infrastructure, semiconductor and technology holdings"
 
     def analyse(self, market_data: dict) -> dict:
         from datetime import datetime
+        from config.holdings import tickers_by_sector
 
-        relevant = {k: v for k, v in market_data.items() if k in AI_QUANTUM_TICKERS}
+        ai_quantum_tickers = set(tickers_by_sector(AI_QUANTUM_SECTORS))
+        relevant = {k: v for k, v in market_data.items() if k in ai_quantum_tickers}
         price_str = self._format_price_data(relevant)
 
         user_prompt = USER_PROMPT_TEMPLATE.format(

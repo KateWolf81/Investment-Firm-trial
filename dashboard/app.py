@@ -153,18 +153,24 @@ def _merge_extracted_holdings(rows: list[dict], extracted: list[dict]) -> list[d
 
 # Broker/statement CSV exports rarely use our exact column names — map common
 # alternatives onto our schema instead of silently producing blank rows.
+# Order matters within each list: the first alias present in the file wins.
 CSV_COLUMN_ALIASES = {
-    "ticker": {"ticker", "symbol", "code", "stock", "ticker_symbol"},
-    "name": {"name", "company", "description", "security", "security_name", "company_name"},
-    "currency": {"currency", "ccy"},
-    "exchange": {"exchange", "market"},
-    "sector": {"sector", "industry"},
-    "region": {"region", "country"},
-    "notes": {"notes", "note", "comment", "comments"},
-    "shares_owned": {"shares_owned", "shares", "quantity", "qty", "units", "holding", "holdings", "share_qty"},
-    "avg_cost": {"avg_cost", "average_cost", "avg_price", "average_price", "cost_basis",
-                 "purchase_price", "cost_per_share", "unit_cost", "book_cost"},
-    "type": {"type", "asset_type", "asset_class", "instrument_type"},
+    "ticker": ["ticker", "symbol", "code", "stock", "ticker_symbol"],
+    "name": ["name", "company", "description", "security", "security_name", "company_name", "investment"],
+    # Prefer the stock's own trading currency over the platform's reporting/base
+    # currency — that's what matches the price data we fetch from the market.
+    "currency": ["currency", "ccy", "market_currency", "valuation_currency"],
+    "exchange": ["exchange", "market"],
+    "sector": ["sector", "industry"],
+    "region": ["region", "country"],
+    "notes": ["notes", "note", "comment", "comments"],
+    "shares_owned": ["shares_owned", "shares", "quantity", "qty", "units", "holding", "holdings", "share_qty"],
+    "avg_cost": ["avg_cost", "average_cost", "avg_price", "average_price",
+                 "purchase_price", "cost_per_share", "unit_cost"],
+    # Total cost basis (not per-share) — some statements only give this; we divide
+    # by shares_owned to get avg_cost when there's no direct per-share column.
+    "cost_total": ["cost", "cost_basis", "book_cost", "total_cost"],
+    "type": ["type", "asset_type", "asset_class", "instrument_type"],
 }
 
 
@@ -185,8 +191,14 @@ def _clean_number(val) -> float:
         return 0.0
 
 
-def _import_csv(df) -> tuple[list[dict], set[str]]:
-    """Map a CSV with arbitrary broker export column names onto our schema."""
+def _import_csv(df) -> tuple[list[dict], set[str], bool]:
+    """
+    Map a CSV with arbitrary broker export column names onto our schema.
+
+    Returns (rows, matched_columns, used_name_as_ticker). used_name_as_ticker is
+    True when the file has no real ticker/symbol column, so the investment name
+    was used as a placeholder — those rows need the ticker fixed manually.
+    """
     import pandas as pd
     normalized = {_normalize_col(c): c for c in df.columns}
     mapping = {}
@@ -196,23 +208,32 @@ def _import_csv(df) -> tuple[list[dict], set[str]]:
                 mapping[canon] = normalized[alias]
                 break
 
+    used_name_as_ticker = "ticker" not in mapping and "name" in mapping
+    ticker_source = mapping.get("ticker") or (mapping.get("name") if used_name_as_ticker else None)
+
     rows = []
     for _, r in df.iterrows():
-        ticker = str(r[mapping["ticker"]]).strip().upper() if "ticker" in mapping else ""
-        if not ticker or ticker.lower() == "nan":
+        raw = str(r[ticker_source]).strip() if ticker_source else ""
+        if not raw or raw.lower() == "nan":
             continue
         row = {c: "" for c in COLUMNS}
-        row["ticker"] = ticker
+        row["ticker"] = raw if used_name_as_ticker else raw.upper()
         for c in ("name", "currency", "exchange", "sector", "region", "notes"):
             if c in mapping:
                 val = r[mapping[c]]
                 row[c] = "" if pd.isna(val) else str(val).strip()
-        row["shares_owned"] = _clean_number(r[mapping["shares_owned"]]) if "shares_owned" in mapping else 0
-        row["avg_cost"] = _clean_number(r[mapping["avg_cost"]]) if "avg_cost" in mapping else 0
+        shares = _clean_number(r[mapping["shares_owned"]]) if "shares_owned" in mapping else 0
+        row["shares_owned"] = shares
+        if "avg_cost" in mapping:
+            row["avg_cost"] = _clean_number(r[mapping["avg_cost"]])
+        elif "cost_total" in mapping and shares:
+            row["avg_cost"] = round(_clean_number(r[mapping["cost_total"]]) / shares, 4)
+        else:
+            row["avg_cost"] = 0
         detected_type = str(r[mapping["type"]]).strip().lower() if "type" in mapping else ""
         row["type"] = detected_type if detected_type in ("equity", "etf") else "equity"
         rows.append(row)
-    return rows, set(mapping.keys())
+    return rows, set(mapping.keys()), used_name_as_ticker
 
 
 upload_tab1, upload_tab2 = st.tabs(["📄 Upload CSV", "📸 Upload screenshot"])
@@ -226,22 +247,33 @@ with upload_tab1:
         if st.session_state.get("_last_csv_sig") != csv_sig:
             import pandas as pd
             combined_rows = []
+            any_placeholder_tickers = False
             for f in uploaded_csvs:
                 df = pd.read_csv(f)
-                file_rows, matched = _import_csv(df)
+                file_rows, matched, used_name_as_ticker = _import_csv(df)
                 combined_rows.extend(file_rows)
-                if "ticker" not in matched:
+                if not matched or ("ticker" not in matched and "name" not in matched):
                     st.error(
-                        f"**{f.name}**: couldn't find a ticker/symbol column — got no holdings "
-                        f"from this file. Its columns are: {', '.join(str(c) for c in df.columns)}. "
-                        "Rename that column to 'ticker' or 'symbol' and re-upload."
+                        f"**{f.name}**: couldn't find a ticker/symbol OR name column — got no "
+                        f"holdings from this file. Its columns are: "
+                        f"{', '.join(str(c) for c in df.columns)}. Rename a column to 'ticker' "
+                        "or 'symbol' and re-upload."
                     )
                 elif not file_rows:
-                    st.warning(f"**{f.name}**: ticker column found, but every row was empty.")
+                    st.warning(f"**{f.name}**: matched a column, but every row was empty.")
+                elif used_name_as_ticker:
+                    any_placeholder_tickers = True
             st.session_state["holdings_rows"] = combined_rows
             st.session_state["_last_csv_sig"] = csv_sig
             if combined_rows:
                 st.success(f"Loaded {len(combined_rows)} holding(s) from {len(uploaded_csvs)} file(s).")
+            if any_placeholder_tickers:
+                st.warning(
+                    "One or more files had no ticker/symbol column — only investment names. "
+                    "I've put the name in the Ticker column as a placeholder for those rows; "
+                    "please replace each with its real ticker (e.g. 'NVDA' for NVIDIA) in the "
+                    "table below so prices and analysis work correctly."
+                )
 
 with upload_tab2:
     st.caption(

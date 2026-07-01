@@ -252,6 +252,10 @@ with upload_tab1:
                 df = pd.read_csv(f)
                 file_rows, matched, used_name_as_ticker = _import_csv(df)
                 combined_rows.extend(file_rows)
+                with st.expander(f"🔍 Raw preview: {f.name} ({len(df)} rows, {len(df.columns)} columns)"):
+                    st.write("Detected columns:", list(df.columns))
+                    st.write("Mapped columns → our fields:", matched)
+                    st.dataframe(df.head(5), use_container_width=True)
                 if not matched or ("ticker" not in matched and "name" not in matched):
                     st.error(
                         f"**{f.name}**: couldn't find a ticker/symbol OR name column — got no "
@@ -261,8 +265,10 @@ with upload_tab1:
                     )
                 elif not file_rows:
                     st.warning(f"**{f.name}**: matched a column, but every row was empty.")
-                elif used_name_as_ticker:
-                    any_placeholder_tickers = True
+                else:
+                    st.caption(f"→ Loaded {len(file_rows)} holding(s) from **{f.name}**.")
+                    if used_name_as_ticker:
+                        any_placeholder_tickers = True
             st.session_state["holdings_rows"] = combined_rows
             st.session_state["_last_csv_sig"] = csv_sig
             if combined_rows:

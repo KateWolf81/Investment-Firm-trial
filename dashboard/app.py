@@ -152,12 +152,14 @@ st.divider()
 
 st.subheader("Weekly briefing")
 st.caption(
-    "Runs all 8 analysts + Risk Manager + Portfolio Manager and produces the full weekly "
-    "report. Takes a minute or two."
+    "Runs all 8 analysts + Risk Manager + Portfolio Manager, one after another — each makes "
+    "its own call to Claude, so this genuinely takes 5-10 minutes. Leave the tab open; the "
+    "report appears below the moment it's done. Closing the tab or restarting the app mid-run "
+    "will interrupt it, so it's best to just wait."
 )
 
 if st.button("🚀 Generate this week's briefing", type="primary"):
-    with st.spinner("Running the firm — fetching prices, consulting analysts, synthesising..."):
+    with st.spinner("Running the firm — fetching prices, consulting analysts, synthesising... this takes several minutes."):
         try:
             import main as firm_main
             report_path = firm_main.run_weekly_review(dry_run=True)
@@ -165,6 +167,15 @@ if st.button("🚀 Generate this week's briefing", type="primary"):
             st.success("Briefing generated.")
         except Exception as exc:
             st.error(f"Briefing generation failed: {exc}")
+
+# If this session doesn't remember a report (e.g. after a reboot) but one was
+# already generated, pick up the most recent file from disk instead of losing it.
+if "last_report_path" not in st.session_state:
+    from config.settings import REPORTS_DIR
+    existing_reports = sorted(REPORTS_DIR.glob("briefing_*.html")) if REPORTS_DIR.exists() else []
+    if existing_reports:
+        st.session_state["last_report_path"] = str(existing_reports[-1])
+        st.info(f"Showing the most recent previously-generated report ({existing_reports[-1].stem}).")
 
 if "last_report_path" in st.session_state:
     report_path = Path(st.session_state["last_report_path"])

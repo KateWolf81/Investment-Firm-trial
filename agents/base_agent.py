@@ -73,7 +73,10 @@ class BaseAgent(ABC):
         try:
             message = self.client.messages.create(
                 model=self.model,
-                max_tokens=8192,
+                # The Portfolio Manager's consolidated schema (holdings review across
+                # every ticker + new stock recommendations) is much larger than a
+                # single analyst's — 8192 was truncating its JSON mid-object.
+                max_tokens=16000,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )

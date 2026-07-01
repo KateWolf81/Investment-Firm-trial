@@ -44,6 +44,7 @@ if not os.getenv("ANTHROPIC_API_KEY"):
     st.stop()
 
 COLUMNS = ["ticker", "name", "currency", "exchange", "sector", "region", "notes"]
+POSITION_COLUMNS = ["shares_owned", "avg_cost"]  # your personal data, saved alongside each holding
 
 
 def _holdings_to_rows(holdings: dict) -> list[dict]:
@@ -51,6 +52,8 @@ def _holdings_to_rows(holdings: dict) -> list[dict]:
     for kind in ("equities", "etfs"):
         for entry in holdings.get(kind, []):
             row = {c: entry.get(c, "") for c in COLUMNS}
+            row["shares_owned"] = entry.get("shares_owned", 0) or 0
+            row["avg_cost"] = entry.get("avg_cost", 0) or 0
             row["type"] = "equity" if kind == "equities" else "etf"
             rows.append(row)
     return rows
@@ -64,6 +67,10 @@ def _rows_to_holdings(rows: list[dict], benchmark: dict) -> dict:
             continue
         entry = {c: row.get(c, "") for c in COLUMNS if row.get(c)}
         entry["ticker"] = ticker
+        for c in POSITION_COLUMNS:
+            val = row.get(c) or 0
+            if val:
+                entry[c] = val
         (etfs if row.get("type") == "etf" else equities).append(entry)
     return {"equities": equities, "etfs": etfs, "benchmark": benchmark}
 
@@ -74,17 +81,18 @@ st.subheader("This week's holdings")
 st.caption(
     "Edit tickers directly, or upload a CSV with the same columns below. Analysts route "
     "coverage automatically by sector/region/exchange, so new tickers just need those "
-    "fields filled in reasonably."
+    "fields filled in reasonably. Fill in **Shares Owned** and **Avg Cost** (in the stock's "
+    "own currency) to see your personal position value and gain."
 )
 
 uploaded = st.file_uploader("Upload a holdings CSV (optional)", type=["csv"])
 if uploaded is not None:
     import pandas as pd
     upload_df = pd.read_csv(uploaded)
-    for col in COLUMNS + ["type"]:
+    for col in COLUMNS + POSITION_COLUMNS + ["type"]:
         if col not in upload_df.columns:
-            upload_df[col] = ""
-    st.session_state["holdings_rows"] = upload_df[COLUMNS + ["type"]].to_dict("records")
+            upload_df[col] = 0 if col in POSITION_COLUMNS else ""
+    st.session_state["holdings_rows"] = upload_df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records")
 
 if "holdings_rows" not in st.session_state:
     st.session_state["holdings_rows"] = _holdings_to_rows(current)
@@ -100,7 +108,8 @@ def _fetch_price_snapshot(tickers: tuple) -> dict:
         s = get_price_summary(ticker)
         snapshot[ticker] = {
             "price": s.get("latest_close") if s.get("data_available") else None,
-            "chg_this_week_pct": s.get("change_5d_pct") if s.get("data_available") else None,
+            "chg_today_pct": s.get("change_1d_pct") if s.get("data_available") else None,
+            "chg_week_pct": s.get("change_5d_pct") if s.get("data_available") else None,
         }
     return snapshot
 
@@ -119,12 +128,30 @@ display_rows = []
 for row in rows:
     ticker = str(row.get("ticker", "")).strip().upper()
     p = price_snapshot.get(ticker, {})
+    price = p.get("price")
+    shares = float(row.get("shares_owned") or 0)
+    avg_cost = float(row.get("avg_cost") or 0)
+
     merged = dict(row)
-    merged["price"] = p.get("price")
-    merged["chg_this_week_pct"] = p.get("chg_this_week_pct")
+    merged["price"] = price
+    merged["chg_today_pct"] = p.get("chg_today_pct")
+    merged["chg_week_pct"] = p.get("chg_week_pct")
+    merged["shares_owned"] = shares
+    merged["avg_cost"] = avg_cost
+    merged["market_value"] = (shares * price) if (price and shares) else None
+    if price and avg_cost:
+        merged["gain_pct"] = (price / avg_cost - 1) * 100
+        merged["gain_value"] = shares * (price - avg_cost)
+    else:
+        merged["gain_pct"] = None
+        merged["gain_value"] = None
     display_rows.append(merged)
 
-DISPLAY_COLUMNS = ["ticker", "price", "chg_this_week_pct"] + [c for c in COLUMNS if c != "ticker"] + ["type"]
+DISPLAY_COLUMNS = (
+    ["ticker", "price", "chg_today_pct", "chg_week_pct", "shares_owned", "avg_cost",
+     "market_value", "gain_value", "gain_pct"]
+    + [c for c in COLUMNS if c != "ticker"] + ["type"]
+)
 
 edited_df = st.data_editor(
     pd.DataFrame(display_rows, columns=DISPLAY_COLUMNS),
@@ -133,16 +160,27 @@ edited_df = st.data_editor(
     column_config={
         "type": st.column_config.SelectboxColumn(options=["equity", "etf"]),
         "price": st.column_config.NumberColumn("Price", disabled=True, format="%.4f"),
-        "chg_this_week_pct": st.column_config.NumberColumn("This Week", disabled=True, format="%+.2f%%"),
+        "chg_today_pct": st.column_config.NumberColumn("Today", disabled=True, format="%+.2f%%"),
+        "chg_week_pct": st.column_config.NumberColumn("This Week", disabled=True, format="%+.2f%%"),
+        "shares_owned": st.column_config.NumberColumn("Shares Owned", min_value=0.0, format="%.4f"),
+        "avg_cost": st.column_config.NumberColumn("Avg Cost", min_value=0.0, format="%.4f"),
+        "market_value": st.column_config.NumberColumn("Value", disabled=True, format="%.2f"),
+        "gain_value": st.column_config.NumberColumn("Gain (£/$/etc)", disabled=True, format="%+.2f"),
+        "gain_pct": st.column_config.NumberColumn("Gain %", disabled=True, format="%+.2f%%"),
     },
     key="holdings_editor",
 )
-st.caption("Price / This Week are live from Yahoo Finance (cached 5 min) — not editable, and not saved to holdings.")
+st.caption(
+    "Today / This Week = the stock's own price move (market performance). "
+    "Value / Gain = your position, based on Shares Owned × Avg Cost you enter — shown in "
+    "each stock's own currency, not converted to GBP. Price/Today/Week/Value/Gain are "
+    "computed live and not saved; Shares Owned and Avg Cost ARE saved with your holdings."
+)
 
 col1, col2 = st.columns([1, 4])
 with col1:
     if st.button("💾 Save holdings", use_container_width=True):
-        rows_to_save = edited_df[COLUMNS + ["type"]].to_dict("records")
+        rows_to_save = edited_df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records")
         new_holdings = _rows_to_holdings(rows_to_save, current.get("benchmark", {}))
         save_holdings(new_holdings, HOLDINGS_FILE)
         st.session_state["holdings_rows"] = rows_to_save

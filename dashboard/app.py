@@ -9,6 +9,7 @@ Deploy free:   share.streamlit.io — see dashboard/README.md
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -150,6 +151,70 @@ def _merge_extracted_holdings(rows: list[dict], extracted: list[dict]) -> list[d
     return rows
 
 
+# Broker/statement CSV exports rarely use our exact column names — map common
+# alternatives onto our schema instead of silently producing blank rows.
+CSV_COLUMN_ALIASES = {
+    "ticker": {"ticker", "symbol", "code", "stock", "ticker_symbol"},
+    "name": {"name", "company", "description", "security", "security_name", "company_name"},
+    "currency": {"currency", "ccy"},
+    "exchange": {"exchange", "market"},
+    "sector": {"sector", "industry"},
+    "region": {"region", "country"},
+    "notes": {"notes", "note", "comment", "comments"},
+    "shares_owned": {"shares_owned", "shares", "quantity", "qty", "units", "holding", "holdings", "share_qty"},
+    "avg_cost": {"avg_cost", "average_cost", "avg_price", "average_price", "cost_basis",
+                 "purchase_price", "cost_per_share", "unit_cost", "book_cost"},
+    "type": {"type", "asset_type", "asset_class", "instrument_type"},
+}
+
+
+def _normalize_col(col) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(col).strip().lower()).strip("_")
+
+
+def _clean_number(val) -> float:
+    import pandas as pd
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    cleaned = re.sub(r"[^0-9.\-]", "", str(val))
+    try:
+        return float(cleaned) if cleaned not in ("", "-", ".") else 0.0
+    except ValueError:
+        return 0.0
+
+
+def _import_csv(df) -> tuple[list[dict], set[str]]:
+    """Map a CSV with arbitrary broker export column names onto our schema."""
+    import pandas as pd
+    normalized = {_normalize_col(c): c for c in df.columns}
+    mapping = {}
+    for canon, aliases in CSV_COLUMN_ALIASES.items():
+        for alias in aliases:
+            if alias in normalized:
+                mapping[canon] = normalized[alias]
+                break
+
+    rows = []
+    for _, r in df.iterrows():
+        ticker = str(r[mapping["ticker"]]).strip().upper() if "ticker" in mapping else ""
+        if not ticker or ticker.lower() == "nan":
+            continue
+        row = {c: "" for c in COLUMNS}
+        row["ticker"] = ticker
+        for c in ("name", "currency", "exchange", "sector", "region", "notes"):
+            if c in mapping:
+                val = r[mapping[c]]
+                row[c] = "" if pd.isna(val) else str(val).strip()
+        row["shares_owned"] = _clean_number(r[mapping["shares_owned"]]) if "shares_owned" in mapping else 0
+        row["avg_cost"] = _clean_number(r[mapping["avg_cost"]]) if "avg_cost" in mapping else 0
+        detected_type = str(r[mapping["type"]]).strip().lower() if "type" in mapping else ""
+        row["type"] = detected_type if detected_type in ("equity", "etf") else "equity"
+        rows.append(row)
+    return rows, set(mapping.keys())
+
+
 upload_tab1, upload_tab2 = st.tabs(["📄 Upload CSV", "📸 Upload screenshot"])
 
 with upload_tab1:
@@ -163,13 +228,20 @@ with upload_tab1:
             combined_rows = []
             for f in uploaded_csvs:
                 df = pd.read_csv(f)
-                for col in COLUMNS + POSITION_COLUMNS + ["type"]:
-                    if col not in df.columns:
-                        df[col] = 0 if col in POSITION_COLUMNS else ""
-                combined_rows.extend(df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records"))
+                file_rows, matched = _import_csv(df)
+                combined_rows.extend(file_rows)
+                if "ticker" not in matched:
+                    st.error(
+                        f"**{f.name}**: couldn't find a ticker/symbol column — got no holdings "
+                        f"from this file. Its columns are: {', '.join(str(c) for c in df.columns)}. "
+                        "Rename that column to 'ticker' or 'symbol' and re-upload."
+                    )
+                elif not file_rows:
+                    st.warning(f"**{f.name}**: ticker column found, but every row was empty.")
             st.session_state["holdings_rows"] = combined_rows
             st.session_state["_last_csv_sig"] = csv_sig
-            st.success(f"Loaded {len(combined_rows)} holding(s) from {len(uploaded_csvs)} file(s).")
+            if combined_rows:
+                st.success(f"Loaded {len(combined_rows)} holding(s) from {len(uploaded_csvs)} file(s).")
 
 with upload_tab2:
     st.caption(

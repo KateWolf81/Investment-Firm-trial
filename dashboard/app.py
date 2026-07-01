@@ -153,35 +153,58 @@ def _merge_extracted_holdings(rows: list[dict], extracted: list[dict]) -> list[d
 upload_tab1, upload_tab2 = st.tabs(["📄 Upload CSV", "📸 Upload screenshot"])
 
 with upload_tab1:
-    uploaded = st.file_uploader("Upload a holdings CSV", type=["csv"], key="csv_uploader")
-    if uploaded is not None:
-        import pandas as pd
-        upload_df = pd.read_csv(uploaded)
-        for col in COLUMNS + POSITION_COLUMNS + ["type"]:
-            if col not in upload_df.columns:
-                upload_df[col] = 0 if col in POSITION_COLUMNS else ""
-        st.session_state["holdings_rows"] = upload_df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records")
+    uploaded_csvs = st.file_uploader(
+        "Upload one or more holdings CSVs", type=["csv"], accept_multiple_files=True, key="csv_uploader",
+    )
+    if uploaded_csvs:
+        csv_sig = tuple((f.name, f.size) for f in uploaded_csvs)
+        if st.session_state.get("_last_csv_sig") != csv_sig:
+            import pandas as pd
+            combined_rows = []
+            for f in uploaded_csvs:
+                df = pd.read_csv(f)
+                for col in COLUMNS + POSITION_COLUMNS + ["type"]:
+                    if col not in df.columns:
+                        df[col] = 0 if col in POSITION_COLUMNS else ""
+                combined_rows.extend(df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records"))
+            st.session_state["holdings_rows"] = combined_rows
+            st.session_state["_last_csv_sig"] = csv_sig
+            st.success(f"Loaded {len(combined_rows)} holding(s) from {len(uploaded_csvs)} file(s).")
 
 with upload_tab2:
     st.caption(
-        "Upload a screenshot of your brokerage app or a statement — Claude will read off "
-        "tickers, shares, and average cost where visible. Review the table below afterwards; "
-        "OCR from a screenshot isn't perfect, and fields it can't see (sector, exchange, "
-        "region) will need to be filled in manually so analysts route coverage correctly."
+        "Upload one or more screenshots of your brokerage app or a statement — Claude reads "
+        "off tickers, shares, and average cost where visible, as soon as you upload (no extra "
+        "button needed). Review the table below afterwards; OCR from a screenshot isn't "
+        "perfect, and fields it can't see (sector, exchange, region) will need to be filled "
+        "in manually so analysts route coverage correctly."
     )
-    screenshot = st.file_uploader("Upload a screenshot", type=["png", "jpg", "jpeg"], key="screenshot_uploader")
-    if screenshot is not None and st.button("🔎 Extract holdings from screenshot"):
-        with st.spinner("Reading the screenshot..."):
-            try:
-                extracted = _extract_holdings_from_image(screenshot.getvalue(), screenshot.type)
-                if not extracted:
-                    st.warning("Couldn't find any holdings in that image — try a clearer screenshot.")
-                else:
+    screenshots = st.file_uploader(
+        "Upload one or more screenshots", type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True, key="screenshot_uploader",
+    )
+    if screenshots:
+        shot_sig = tuple((f.name, f.size) for f in screenshots)
+        if st.session_state.get("_last_screenshot_sig") != shot_sig:
+            with st.spinner(f"Reading {len(screenshots)} screenshot(s)..."):
+                all_extracted, failures = [], []
+                for f in screenshots:
+                    try:
+                        all_extracted.extend(_extract_holdings_from_image(f.getvalue(), f.type))
+                    except Exception as exc:
+                        failures.append(f"{f.name}: {exc}")
+                st.session_state["_last_screenshot_sig"] = shot_sig
+                if all_extracted:
                     base_rows = st.session_state.get("holdings_rows") or _holdings_to_rows(current)
-                    st.session_state["holdings_rows"] = _merge_extracted_holdings(base_rows, extracted)
-                    st.success(f"Extracted {len(extracted)} holding(s) — review them in the table below, then Save.")
-            except Exception as exc:
-                st.error(f"Couldn't read that screenshot: {exc}")
+                    st.session_state["holdings_rows"] = _merge_extracted_holdings(base_rows, all_extracted)
+                    st.success(
+                        f"Extracted {len(all_extracted)} holding(s) from {len(screenshots)} "
+                        f"screenshot(s) — review them in the table below, then Save."
+                    )
+                elif not failures:
+                    st.warning("Couldn't find any holdings in those images — try a clearer screenshot.")
+                if failures:
+                    st.error("Some screenshots couldn't be read: " + "; ".join(failures))
 
 if "holdings_rows" not in st.session_state:
     st.session_state["holdings_rows"] = _holdings_to_rows(current)

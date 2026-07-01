@@ -41,6 +41,10 @@ Portfolio ESG Assessment:
 - PYC.AX — you note the ESG angle of rare disease therapeutics (positive social impact)
 - AI/data centre holdings — you track energy intensity and water usage concerns
 
+Each week, alongside your ESG screening of current holdings, surface one or two NEW
+sustainability-themed stock/ETF ideas — either a bargain trading below fair value, or one
+with an especially strong catalyst or growth setup over the next year.
+
 You always respond in valid JSON matching this schema:
 {
   "summary": "1-2 sentence headline",
@@ -53,12 +57,16 @@ You always respond in valid JSON matching this schema:
     }
   ],
   "carbon_market_update": "brief carbon price / VCM update",
-  "regulatory_update": "most important ESG regulatory development today",
-  "opportunities": [
+  "regulatory_update": "most important ESG regulatory development this week",
+  "new_ideas": [
     {
-      "theme": "theme name",
-      "description": "why it is compelling now",
-      "suggested_vehicle": "ETF or direct holding"
+      "ticker": "TICKER or ETF code",
+      "name": "company or fund name",
+      "category": "BARGAIN|STRONG_PROSPECT",
+      "thesis": "why this looks attractive now",
+      "suggested_entry": "price or range to consider",
+      "conviction": "HIGH|MEDIUM|LOW",
+      "expected_timeframe": "3M|6M|12M"
     }
   ],
   "risks": ["risk 1", ...]
@@ -69,13 +77,13 @@ USER_PROMPT_TEMPLATE = """Today is {date}.
 Current portfolio holdings for ESG assessment:
 {holdings_summary}
 
-Please provide your daily sustainability analysis. Cover:
+Please provide this week's sustainability analysis. Cover:
 - Any new ESG regulation (EU, UK, global) that affects the portfolio
 - Carbon market price movements and what they signal
 - Biodiversity / nature credits — any material developments
 - Water scarcity — investment opportunities or portfolio risks
 - ESG controversy screening across current holdings
-- One actionable sustainability investment opportunity
+- One or two new sustainability-themed ideas — a bargain or a strong-prospect setup
 
 Return your analysis as JSON only."""
 

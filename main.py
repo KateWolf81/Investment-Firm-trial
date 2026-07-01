@@ -3,7 +3,7 @@ Investment Firm Simulation — main entry point.
 
 Usage
 -----
-    # Run today's daily simulation (calls all agents, generates report)
+    # Run this week's review (calls all agents, generates report)
     python main.py
 
     # Run in dry-run mode (no trades executed, just report)
@@ -51,8 +51,8 @@ def check_environment() -> bool:
     return True
 
 
-def run_daily_simulation(dry_run: bool = True) -> None:
-    """Run the full daily simulation — fetch data, run all agents, generate report."""
+def run_weekly_review(dry_run: bool = True) -> None:
+    """Run the full weekly review — fetch data, run all agents, generate report."""
     from engine.market_data import fetch_all_holdings, get_price_summary
     from engine.simulation import calculate_nav, record_nav_snapshot
     from engine.benchmark import initialise_benchmark, compare_to_benchmark
@@ -68,11 +68,11 @@ def run_daily_simulation(dry_run: bool = True) -> None:
     from agents.risk_manager import RiskManager
     from agents.portfolio_manager import PortfolioManager
 
-    from reports.daily_briefing import generate_briefing
+    from reports.weekly_briefing import generate_briefing
     from reports.risk_dashboard import print_risk_dashboard
 
     print(f"\n{'='*60}")
-    print(f"INVESTMENT FIRM SIMULATION — {datetime.now().date()}")
+    print(f"INVESTMENT FIRM SIMULATION — WEEKLY REVIEW — {datetime.now().date()}")
     print(f"Mode: {'DRY RUN' if dry_run else 'LIVE PAPER TRADING'}")
     print(f"{'='*60}\n")
 
@@ -177,11 +177,11 @@ def run_daily_simulation(dry_run: bool = True) -> None:
     record_nav_snapshot(nav_snap)
 
     # ── Step 7: Generate HTML report ──────────────────────────────────────────
-    logger.info("Generating daily briefing report...")
+    logger.info("Generating weekly briefing report...")
     report_path = generate_briefing(analyst_reports, pm_report, risk_report)
 
     print(f"\n{'='*60}")
-    print(f"Daily simulation complete.")
+    print(f"Weekly review complete.")
     print(f"Report: {report_path}")
     print(f"NAV:    £{nav_snap['nav_gbp']:,.2f} ({nav_snap['pnl_pct']:+.2f}%)")
     if bm.get("alpha_pp") is not None:
@@ -279,4 +279,4 @@ if __name__ == "__main__":
         run_single_agent(args.agent)
     else:
         dry_run = not args.live
-        run_daily_simulation(dry_run=dry_run)
+        run_weekly_review(dry_run=dry_run)

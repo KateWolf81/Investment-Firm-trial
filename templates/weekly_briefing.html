@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Daily Briefing — {{ date }}</title>
+  <title>Weekly Briefing — {{ date }}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; color: #222; font-size: 14px; }
@@ -47,6 +47,13 @@
     .badge-HIGH { background: #fde68a; color: #92400e; }
     .badge-MEDIUM { background: #e0f2fe; color: #0369a1; }
     .badge-LOW { background: #f0fdf4; color: #166534; }
+    .badge-BARGAIN { background: #dcfce7; color: #16a34a; }
+    .badge-STRONG_PROSPECT { background: #ede9fe; color: #6d28d9; }
+
+    /* Horizon mini-table (inside holdings review cells) */
+    .horizon-row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 12px; }
+    .horizon-row .label { color: #888; width: 42px; flex-shrink: 0; }
+    .horizon-row .target { color: #555; }
 
     /* Risk level */
     .risk-LOW { color: #16a34a; font-weight: 700; }
@@ -88,8 +95,8 @@
   <!-- Header -->
   <div class="header">
     <div>
-      <h1>Investment Firm — Daily Briefing</h1>
-      <div style="color:#aab; font-size:13px; margin-top:4px;">{{ date }} &nbsp;|&nbsp; Paper Portfolio Simulation</div>
+      <h1>Investment Firm — Weekly Briefing</h1>
+      <div style="color:#aab; font-size:13px; margin-top:4px;">Week of {{ date }} &nbsp;|&nbsp; Paper Portfolio Simulation</div>
     </div>
     <div class="meta">
       Base currency: GBP<br>
@@ -134,7 +141,7 @@
   <!-- PM Decisions -->
   {% if pm_decisions %}
   <div class="section">
-    <h2>Today's Decisions</h2>
+    <h2>This Week's Trade Decisions</h2>
     <table>
       <tr>
         <th>Ticker</th>
@@ -152,6 +159,66 @@
         <td><span class="badge badge-{{ d.conviction }}">{{ d.conviction }}</span></td>
         <td style="max-width:320px;">{{ d.rationale }}</td>
         <td style="max-width:200px; color:#888;">{{ d.key_risk }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Holdings Review: 3/6/12 month outlook -->
+  {% if pm_holdings_review %}
+  <div class="section">
+    <h2>Holdings Review — 3 / 6 / 12 Month Outlook</h2>
+    <table>
+      <tr>
+        <th>Ticker</th>
+        <th>3 Month</th>
+        <th>6 Month</th>
+        <th>12 Month</th>
+        <th>Supporting Analysts</th>
+      </tr>
+      {% for h in pm_holdings_review %}
+      <tr>
+        <td><strong>{{ h.ticker }}</strong></td>
+        {% for horizon in [h.three_month, h.six_month, h.twelve_month] %}
+        <td style="min-width:150px;">
+          {% if horizon %}
+          <span class="badge badge-{{ horizon.action }}">{{ horizon.action }}</span>
+          <div class="target">Target: {{ horizon.target_price }}</div>
+          <div style="font-size:11px; color:#888; margin-top:2px;">{{ horizon.rationale }}</div>
+          {% endif %}
+        </td>
+        {% endfor %}
+        <td style="font-size:12px; color:#666;">{{ h.supporting_analysts|join(', ') }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- New Stock Recommendations -->
+  {% if pm_new_stock_recommendations %}
+  <div class="section">
+    <h2>New Stock Recommendations This Week</h2>
+    <table>
+      <tr>
+        <th>Ticker</th>
+        <th>Name</th>
+        <th>Category</th>
+        <th>Conviction</th>
+        <th>Suggested Entry</th>
+        <th>Timeframe</th>
+        <th>Rationale</th>
+      </tr>
+      {% for r in pm_new_stock_recommendations %}
+      <tr>
+        <td><strong>{{ r.ticker }}</strong></td>
+        <td>{{ r.name }}</td>
+        <td><span class="badge badge-{{ r.category }}">{{ r.category|replace('_',' ') }}</span></td>
+        <td><span class="badge badge-{{ r.conviction }}">{{ r.conviction }}</span></td>
+        <td>{{ r.suggested_entry }}</td>
+        <td>{{ r.expected_timeframe }}</td>
+        <td style="max-width:280px;">{{ r.rationale }} <span style="color:#aaa;">— {{ r.source_analyst }}</span></td>
       </tr>
       {% endfor %}
     </table>
@@ -246,10 +313,17 @@
           {% endfor %}
         </ul>
         {% endif %}
-        {% if report.recommendations %}
+        {% if report.holdings_review %}
         <div style="margin-top:8px;">
-          {% for r in report.recommendations %}
-          <span class="badge badge-{{ r.action }}" style="margin-right:4px;">{{ r.ticker }} {{ r.action }}</span>
+          {% for h in report.holdings_review %}
+          <span class="badge badge-{{ h.three_month.action }}" style="margin-right:4px;" title="3M target {{ h.three_month.target_price }}">{{ h.ticker }} {{ h.three_month.action }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if report.new_ideas %}
+        <div style="margin-top:8px;">
+          {% for i in report.new_ideas %}
+          <span class="badge badge-{{ i.category }}" style="margin-right:4px;" title="{{ i.thesis }}">{{ i.ticker }} {{ i.category|replace('_',' ') }}</span>
           {% endfor %}
         </div>
         {% endif %}
@@ -273,7 +347,7 @@
   <!-- Outlook -->
   {% if pm_outlook %}
   <div class="section">
-    <h2>5–10 Day Outlook</h2>
+    <h2>4–6 Week Outlook</h2>
     <p style="font-size:14px; line-height:1.6;">{{ pm_outlook }}</p>
   </div>
   {% endif %}

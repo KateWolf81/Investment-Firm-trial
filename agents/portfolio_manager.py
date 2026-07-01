@@ -2,8 +2,8 @@
 Portfolio Manager — the senior decision-maker.
 
 Receives structured reports from all 8 specialist analysts plus the Risk Manager,
-synthesises them into a daily briefing, and issues buy/hold/sell/investigate
-recommendations with full reasoning.
+synthesises them into a weekly briefing covering a 3/6/12-month BUY/HOLD/SELL view
+on every holding (with target prices) plus a consolidated list of new stock ideas.
 
 The PM is also responsible for executing approved trades via the simulation engine.
 """
@@ -19,8 +19,9 @@ from utils.logger import log_decision
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are the Portfolio Manager of a UK-based investment firm managing a £100,000
-paper portfolio. You receive daily reports from 8 specialist analysts and a Risk Manager, and you
-are responsible for making final investment decisions.
+paper portfolio. You receive weekly reports from 8 specialist analysts and a Risk Manager, and you
+are responsible for synthesising them into the firm's weekly briefing and making final investment
+decisions.
 
 Your investment mandate:
 - Base currency: GBP
@@ -34,11 +35,36 @@ Your decision framework:
 2. Check risk manager flags — any CRITICAL or CONCENTRATION breach must be addressed first
 3. Consider portfolio-level themes vs individual stock stories
 4. Size positions proportionally to conviction and liquidity
+5. For every current holding, reconcile the covering analyst's 3/6/12-month BUY/HOLD/SELL
+   calls and target prices into one consolidated view
+6. Review every analyst's "new_ideas" submissions and select the strongest few — bargains
+   set to re-rate, or stocks with an especially strong prospect — for the weekly recommendation list
 
 You always respond in valid JSON matching this schema:
 {
-  "executive_summary": "3-5 sentence portfolio overview for today",
+  "executive_summary": "3-5 sentence portfolio overview for this week",
   "market_context": "brief global market backdrop",
+  "holdings_review": [
+    {
+      "ticker": "TICKER",
+      "three_month": {"action": "BUY|HOLD|SELL", "target_price": "numeric target, local currency", "rationale": "consolidated reasoning"},
+      "six_month": {"action": "BUY|HOLD|SELL", "target_price": "...", "rationale": "..."},
+      "twelve_month": {"action": "BUY|HOLD|SELL", "target_price": "...", "rationale": "..."},
+      "supporting_analysts": ["Analyst Name 1", "Analyst Name 2"]
+    }
+  ],
+  "new_stock_recommendations": [
+    {
+      "ticker": "TICKER",
+      "name": "company or fund name",
+      "category": "BARGAIN|STRONG_PROSPECT",
+      "conviction": "HIGH|MEDIUM|LOW",
+      "rationale": "why this made the cut",
+      "suggested_entry": "price or range to consider",
+      "expected_timeframe": "3M|6M|12M",
+      "source_analyst": "Analyst Name"
+    }
+  ],
   "decisions": [
     {
       "ticker": "TICKER",
@@ -50,9 +76,9 @@ You always respond in valid JSON matching this schema:
       "key_risk": "main risk to this decision"
     }
   ],
-  "portfolio_changes_summary": "what is changing today and why",
+  "portfolio_changes_summary": "what is changing this week and why",
   "watchlist": ["TICKER1 — reason to watch", ...],
-  "outlook": "portfolio outlook for next 5-10 trading days"
+  "outlook": "portfolio outlook for the next 4-6 weeks"
 }"""
 
 
@@ -93,14 +119,18 @@ CURRENT PRICES:
 ANALYST REPORTS:
 {reports_text}
 
-Based on all analyst inputs, please make your portfolio decisions for today.
+Based on all analyst inputs, please produce this week's briefing.
 Focus especially on:
 1. Any risk manager breaches that require immediate action
-2. High-conviction analyst recommendations with multiple analyst support
-3. Rebalancing opportunities if the portfolio is drifting from target weights
-4. New positions the Asia or Sustainability analysts have flagged as INVESTIGATE
+2. Consolidating each holding's 3/6/12-month BUY/HOLD/SELL view and target price from the
+   covering analyst(s) into "holdings_review"
+3. Selecting the strongest new stock ideas across all analysts' "new_ideas" submissions into
+   "new_stock_recommendations" — prioritise multi-analyst consensus and clear bargains or
+   strong-prospect setups
+4. High-conviction analyst recommendations with multiple analyst support
+5. Rebalancing opportunities if the portfolio is drifting from target weights
 
-Return your decisions as JSON only."""
+Return your briefing as JSON only."""
 
         raw = self._call_claude(SYSTEM_PROMPT, user_prompt)
         parsed = self._parse_json_response(raw)
@@ -209,17 +239,38 @@ Return your decisions as JSON only."""
         for agent_name, report in reports.items():
             sections.append(f"--- {agent_name.upper()} ---")
             sections.append(f"Summary: {report.get('summary', 'N/A')}")
-            recs = report.get("recommendations", [])
-            if recs:
-                sections.append("Recommendations:")
-                for r in recs:
-                    if isinstance(r, dict):
+
+            holdings = report.get("holdings_review", [])
+            if holdings:
+                sections.append("Holdings review (3m / 6m / 12m):")
+                for h in holdings:
+                    if not isinstance(h, dict):
+                        continue
+                    ticker = h.get("ticker", "?")
+                    horizons = []
+                    for key, label in (("three_month", "3M"), ("six_month", "6M"), ("twelve_month", "12M")):
+                        horizon = h.get(key, {})
+                        if isinstance(horizon, dict):
+                            horizons.append(
+                                f"{label}: {horizon.get('action','?')} "
+                                f"@ {horizon.get('target_price','?')} "
+                                f"[{horizon.get('conviction','?')}] — {horizon.get('rationale','')}"
+                            )
+                    sections.append(f"  {ticker}: " + " | ".join(horizons))
+
+            ideas = report.get("new_ideas", [])
+            if ideas:
+                sections.append("New ideas:")
+                for i in ideas:
+                    if isinstance(i, dict):
                         sections.append(
-                            f"  {r.get('ticker','?')} → {r.get('action','?')} "
-                            f"[{r.get('conviction','?')}]: {r.get('rationale','')}"
+                            f"  {i.get('ticker','?')} ({i.get('name','')}) — {i.get('category','?')} "
+                            f"[{i.get('conviction','?')}], entry {i.get('suggested_entry','?')}, "
+                            f"{i.get('expected_timeframe','?')}: {i.get('thesis','')}"
                         )
                     else:
-                        sections.append(f"  {r}")
+                        sections.append(f"  {i}")
+
             risks = report.get("risks", [])
             if risks:
                 sections.append(f"Key risks: {'; '.join(risks[:3])}")

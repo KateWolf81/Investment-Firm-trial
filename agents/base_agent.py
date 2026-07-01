@@ -54,7 +54,12 @@ class BaseAgent(ABC):
           date        : str  (ISO date)
           summary     : str  (1-2 sentence headline)
           observations: list[str]
-          recommendations: list[dict]  each with keys: ticker, action, conviction, rationale
+          holdings_review: list[dict]  one entry per covered holding, each with
+                           ticker, three_month/six_month/twelve_month sub-dicts
+                           (action, target_price, conviction, rationale)
+          new_ideas   : list[dict]  new stock ideas not currently held, each with
+                        ticker, name, category (BARGAIN|STRONG_PROSPECT), thesis,
+                        suggested_entry, conviction, expected_timeframe
           risks       : list[str]
           raw_response: str  (full Claude output, for audit trail)
         """

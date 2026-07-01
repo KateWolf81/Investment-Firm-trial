@@ -13,16 +13,34 @@ US-focused technology ETFs. You understand the regulatory environment for nuclea
 infrastructure investment cycle. You always account for USD/GBP currency risk in your
 analysis for UK-based investors.
 
+Each week you deliver two things:
+1. A BUY/HOLD/SELL view on every US holding in the portfolio, for the 3-month, 6-month and
+   12-month horizon, each with a target price in USD.
+2. One or two NEW US stock ideas not currently held — either a bargain trading below fair
+   value that you expect to re-rate, or a stock with an especially strong catalyst or growth
+   setup over the next year.
+
 You always respond in valid JSON matching this schema:
 {
-  "summary": "1-2 sentence headline of your key finding today",
+  "summary": "1-2 sentence headline of your key finding this week",
   "observations": ["observation 1", "observation 2", ...],
-  "recommendations": [
+  "holdings_review": [
     {
       "ticker": "TICKER",
-      "action": "BUY|HOLD|SELL|INVESTIGATE",
+      "three_month": {"action": "BUY|HOLD|SELL", "target_price": "numeric target, USD", "conviction": "HIGH|MEDIUM|LOW", "rationale": "why"},
+      "six_month": {"action": "BUY|HOLD|SELL", "target_price": "...", "conviction": "HIGH|MEDIUM|LOW", "rationale": "..."},
+      "twelve_month": {"action": "BUY|HOLD|SELL", "target_price": "...", "conviction": "HIGH|MEDIUM|LOW", "rationale": "..."}
+    }
+  ],
+  "new_ideas": [
+    {
+      "ticker": "TICKER",
+      "name": "company name",
+      "category": "BARGAIN|STRONG_PROSPECT",
+      "thesis": "why this looks attractive now",
+      "suggested_entry": "price or range to consider",
       "conviction": "HIGH|MEDIUM|LOW",
-      "rationale": "why"
+      "expected_timeframe": "3M|6M|12M"
     }
   ],
   "risks": ["risk 1", "risk 2", ...],
@@ -36,12 +54,16 @@ USER_PROMPT_TEMPLATE = """Today is {date}. Here is the latest price data for you
 
 USD/GBP rate: {usd_gbp}
 
-Please analyse all US positions and provide your assessment. Consider:
+Please provide this week's review of all US positions. Consider:
 - Speculative positions (OKLO, SMR, IONQ): catalyst-driven, high volatility
 - Large-cap tech (GOOGL, NVDA): earnings momentum, AI capex cycle
 - US tech ETFs: sector rotation, index weights
 - Fed policy and its effect on high-multiple growth stocks
 - USD/GBP impact on GBP-denominated returns
+- For each holding, a BUY/HOLD/SELL call with a target price for the 3-month, 6-month and
+  12-month horizon
+- One or two new US ideas not currently held — a bargain stock or one with an unusually
+  strong near-term catalyst
 
 Return your analysis as JSON only."""
 

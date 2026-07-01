@@ -1,5 +1,5 @@
 """
-Daily briefing report generator.
+Weekly briefing report generator.
 
 Takes all agent reports + portfolio state and renders the HTML briefing
 to reports/output/briefing_YYYY-MM-DD.html.
@@ -25,7 +25,7 @@ def generate_briefing(
     risk_report: dict,
 ) -> Path:
     """
-    Render the daily HTML briefing report.
+    Render the weekly HTML briefing report.
 
     Parameters
     ----------
@@ -67,6 +67,8 @@ def generate_briefing(
         "pm_executive_summary": pm_report.get("executive_summary", ""),
         "pm_market_context": pm_report.get("market_context", ""),
         "pm_decisions": pm_report.get("decisions", []),
+        "pm_holdings_review": pm_report.get("holdings_review", []),
+        "pm_new_stock_recommendations": pm_report.get("new_stock_recommendations", []),
         "pm_watchlist": pm_report.get("watchlist", []),
         "pm_outlook": pm_report.get("outlook", ""),
 
@@ -86,12 +88,12 @@ def generate_briefing(
 
     # Render
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
-    template = env.get_template("daily_briefing.html")
+    template = env.get_template("weekly_briefing.html")
     html = template.render(**context)
 
     output_path = REPORTS_DIR / f"briefing_{today}.html"
     output_path.write_text(html, encoding="utf-8")
-    logger.info(f"Daily briefing written to {output_path}")
+    logger.info(f"Weekly briefing written to {output_path}")
     return output_path
 
 

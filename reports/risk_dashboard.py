@@ -1,6 +1,6 @@
 """
 Risk dashboard — prints a formatted text risk summary to stdout.
-Also used by the daily briefing HTML report for data.
+Also used by the weekly briefing HTML report for data.
 """
 
 from utils.formatters import fmt_gbp, fmt_pct, risk_level_badge

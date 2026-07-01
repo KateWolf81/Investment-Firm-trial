@@ -85,14 +85,103 @@ st.caption(
     "own currency) to see your personal position value and gain."
 )
 
-uploaded = st.file_uploader("Upload a holdings CSV (optional)", type=["csv"])
-if uploaded is not None:
-    import pandas as pd
-    upload_df = pd.read_csv(uploaded)
-    for col in COLUMNS + POSITION_COLUMNS + ["type"]:
-        if col not in upload_df.columns:
-            upload_df[col] = 0 if col in POSITION_COLUMNS else ""
-    st.session_state["holdings_rows"] = upload_df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records")
+def _extract_holdings_from_image(image_bytes: bytes, media_type: str) -> list[dict]:
+    """Ask Claude to read holdings off a screenshot (brokerage app, statement, etc.)."""
+    import base64
+    import json
+    import anthropic
+    from config.settings import CLAUDE_MODEL
+
+    client = anthropic.Anthropic()
+    b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+    prompt = (
+        "This is a screenshot of a stock/ETF portfolio (e.g. from a brokerage app or "
+        "statement). Extract every holding you can see. For each one, capture:\n"
+        "- ticker: the ticker symbol as shown (keep exchange suffixes like .AX or .L if visible)\n"
+        "- name: the company/fund name if shown\n"
+        "- shares_owned: number of shares/units, if shown\n"
+        "- avg_cost: average cost per share/unit as a plain number (no currency symbol), if shown\n"
+        "Omit any field you can't actually see — don't guess numbers. "
+        "Respond with ONLY a JSON array, no other text, like:\n"
+        '[{"ticker": "AAPL", "name": "Apple Inc", "shares_owned": 10, "avg_cost": 150.25}]'
+    )
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+    raw = next((b.text for b in message.content if b.type == "text"), "[]")
+    start, end = raw.find("["), raw.rfind("]")
+    if start == -1 or end == -1:
+        return []
+    try:
+        return json.loads(raw[start:end + 1])
+    except json.JSONDecodeError:
+        return []
+
+
+def _merge_extracted_holdings(rows: list[dict], extracted: list[dict]) -> list[dict]:
+    """Update matching tickers in place (shares/cost only); append unseen ones as new rows."""
+    by_ticker = {str(r.get("ticker", "")).strip().upper(): r for r in rows}
+    for item in extracted:
+        ticker = str(item.get("ticker", "")).strip().upper()
+        if not ticker:
+            continue
+        if ticker in by_ticker:
+            if "shares_owned" in item:
+                by_ticker[ticker]["shares_owned"] = item["shares_owned"]
+            if "avg_cost" in item:
+                by_ticker[ticker]["avg_cost"] = item["avg_cost"]
+        else:
+            new_row = {c: "" for c in COLUMNS}
+            new_row["ticker"] = ticker
+            new_row["name"] = item.get("name", "")
+            new_row["shares_owned"] = item.get("shares_owned", 0) or 0
+            new_row["avg_cost"] = item.get("avg_cost", 0) or 0
+            new_row["type"] = "equity"
+            rows.append(new_row)
+            by_ticker[ticker] = new_row
+    return rows
+
+
+upload_tab1, upload_tab2 = st.tabs(["📄 Upload CSV", "📸 Upload screenshot"])
+
+with upload_tab1:
+    uploaded = st.file_uploader("Upload a holdings CSV", type=["csv"], key="csv_uploader")
+    if uploaded is not None:
+        import pandas as pd
+        upload_df = pd.read_csv(uploaded)
+        for col in COLUMNS + POSITION_COLUMNS + ["type"]:
+            if col not in upload_df.columns:
+                upload_df[col] = 0 if col in POSITION_COLUMNS else ""
+        st.session_state["holdings_rows"] = upload_df[COLUMNS + POSITION_COLUMNS + ["type"]].to_dict("records")
+
+with upload_tab2:
+    st.caption(
+        "Upload a screenshot of your brokerage app or a statement — Claude will read off "
+        "tickers, shares, and average cost where visible. Review the table below afterwards; "
+        "OCR from a screenshot isn't perfect, and fields it can't see (sector, exchange, "
+        "region) will need to be filled in manually so analysts route coverage correctly."
+    )
+    screenshot = st.file_uploader("Upload a screenshot", type=["png", "jpg", "jpeg"], key="screenshot_uploader")
+    if screenshot is not None and st.button("🔎 Extract holdings from screenshot"):
+        with st.spinner("Reading the screenshot..."):
+            try:
+                extracted = _extract_holdings_from_image(screenshot.getvalue(), screenshot.type)
+                if not extracted:
+                    st.warning("Couldn't find any holdings in that image — try a clearer screenshot.")
+                else:
+                    base_rows = st.session_state.get("holdings_rows") or _holdings_to_rows(current)
+                    st.session_state["holdings_rows"] = _merge_extracted_holdings(base_rows, extracted)
+                    st.success(f"Extracted {len(extracted)} holding(s) — review them in the table below, then Save.")
+            except Exception as exc:
+                st.error(f"Couldn't read that screenshot: {exc}")
 
 if "holdings_rows" not in st.session_state:
     st.session_state["holdings_rows"] = _holdings_to_rows(current)

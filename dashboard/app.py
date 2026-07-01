@@ -80,10 +80,11 @@ current = load_holdings()
 
 st.subheader("This week's holdings")
 st.caption(
-    "Edit tickers directly, or upload a CSV with the same columns below. Analysts route "
-    "coverage automatically by sector/region/exchange, so new tickers just need those "
-    "fields filled in reasonably. Fill in **Shares Owned** and **Avg Cost** (in the stock's "
-    "own currency) to see your personal position value and gain."
+    "Edit tickers directly below, or upload a CSV/screenshot in any format — you'll "
+    "confirm which column is which, nothing is guessed silently. In the table, "
+    "📄 columns are your data (edited or uploaded); 🌐 columns are fetched live from "
+    "Yahoo Finance. Analysts route coverage automatically by sector/region/exchange, "
+    "so new tickers just need those fields filled in reasonably."
 )
 
 def _extract_holdings_from_image(image_bytes: bytes, media_type: str) -> list[dict]:
@@ -191,15 +192,32 @@ def _clean_number(val) -> float:
         return 0.0
 
 
-def _import_csv(df) -> tuple[list[dict], set[str], bool]:
-    """
-    Map a CSV with arbitrary broker export column names onto our schema.
+NONE_OPTION = "-- none --"
 
-    Returns (rows, matched_columns, used_name_as_ticker). used_name_as_ticker is
-    True when the file has no real ticker/symbol column, so the investment name
-    was used as a placeholder — those rows need the ticker fixed manually.
+
+def _safe_read_csv(uploaded_file) -> tuple:
+    """
+    Read a CSV robustly, guarding against pandas' worst CSV footgun: if any row has
+    MORE fields than the header (usually an unquoted comma inside a value — a name,
+    or a number like "11,845.02"), pandas silently assumes the file has an implicit
+    index column and shifts EVERY row's values one column to the left — no error,
+    just quietly wrong data throughout the whole file. `index_col=False` disables
+    that assumption; the offending row still loses its extra field, but every other
+    row (and every other column) stays correctly aligned.
     """
     import pandas as pd
+    import warnings
+    from io import StringIO
+    text = uploaded_file.getvalue().decode("utf-8", errors="replace")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        df = pd.read_csv(StringIO(text), index_col=False)
+        had_ragged_rows = any(issubclass(w.category, pd.errors.ParserWarning) for w in caught)
+    return df, had_ragged_rows
+
+
+def _guess_column_mapping(df) -> dict:
+    """Best-effort default selections for the manual mapping UI below — never used silently."""
     normalized = {_normalize_col(c): c for c in df.columns}
     mapping = {}
     for canon, aliases in CSV_COLUMN_ALIASES.items():
@@ -207,79 +225,108 @@ def _import_csv(df) -> tuple[list[dict], set[str], bool]:
             if alias in normalized:
                 mapping[canon] = normalized[alias]
                 break
+    return mapping
 
-    used_name_as_ticker = "ticker" not in mapping and "name" in mapping
-    ticker_source = mapping.get("ticker") or (mapping.get("name") if used_name_as_ticker else None)
 
+def _build_rows_from_mapping(df, ticker_col, name_col, shares_col, cost_col, cost_is_total) -> list[dict]:
+    """Build holdings rows using the EXACT columns the user picked — no guessing."""
+    import pandas as pd
     rows = []
     for _, r in df.iterrows():
-        raw = str(r[ticker_source]).strip() if ticker_source else ""
-        if not raw or raw.lower() == "nan":
+        raw_ticker = str(r[ticker_col]).strip() if ticker_col != NONE_OPTION else ""
+        if not raw_ticker or raw_ticker.lower() == "nan":
             continue
         row = {c: "" for c in COLUMNS}
-        row["ticker"] = raw if used_name_as_ticker else raw.upper()
-        for c in ("name", "currency", "exchange", "sector", "region", "notes"):
-            if c in mapping:
-                val = r[mapping[c]]
-                row[c] = "" if pd.isna(val) else str(val).strip()
-        shares = _clean_number(r[mapping["shares_owned"]]) if "shares_owned" in mapping else 0
+        row["ticker"] = raw_ticker.upper()
+        if name_col != NONE_OPTION:
+            val = r[name_col]
+            row["name"] = "" if pd.isna(val) else str(val).strip()
+        shares = _clean_number(r[shares_col]) if shares_col != NONE_OPTION else 0
         row["shares_owned"] = shares
-        if "avg_cost" in mapping:
-            row["avg_cost"] = _clean_number(r[mapping["avg_cost"]])
-        elif "cost_total" in mapping and shares:
-            row["avg_cost"] = round(_clean_number(r[mapping["cost_total"]]) / shares, 4)
+        if cost_col != NONE_OPTION:
+            raw_cost = _clean_number(r[cost_col])
+            row["avg_cost"] = round(raw_cost / shares, 4) if (cost_is_total and shares) else raw_cost
         else:
             row["avg_cost"] = 0
-        detected_type = str(r[mapping["type"]]).strip().lower() if "type" in mapping else ""
-        row["type"] = detected_type if detected_type in ("equity", "etf") else "equity"
+        row["type"] = "equity"
         rows.append(row)
-    return rows, set(mapping.keys()), used_name_as_ticker
+    return rows
 
 
 upload_tab1, upload_tab2 = st.tabs(["📄 Upload CSV", "📸 Upload screenshot"])
 
 with upload_tab1:
+    st.caption(
+        "For each file, confirm which column is which below — pre-filled with a best guess, "
+        "but nothing is used until you can see and (if needed) correct it."
+    )
     uploaded_csvs = st.file_uploader(
         "Upload one or more holdings CSVs", type=["csv"], accept_multiple_files=True, key="csv_uploader",
     )
     if uploaded_csvs:
-        csv_sig = tuple((f.name, f.size) for f in uploaded_csvs)
+        combined_rows = []
+        sig_parts = []
+        for f in uploaded_csvs:
+            df, had_ragged_rows = _safe_read_csv(f)
+            if had_ragged_rows:
+                st.warning(
+                    f"**{f.name}**: at least one row has more fields than the header — usually "
+                    "an unquoted comma inside a value (a name, or a number like '11,845.02'). "
+                    "That specific row may have lost a value; check it against the raw preview "
+                    "below. Every other row's columns are correctly aligned."
+                )
+
+            st.markdown(f"**{f.name}** — {len(df)} rows read")
+            with st.expander("Preview raw data", expanded=False):
+                st.dataframe(df.head(5), use_container_width=True)
+
+            guess = _guess_column_mapping(df)
+            options = [NONE_OPTION] + [str(c) for c in df.columns]
+
+            def _default_index(canon, fallback=None):
+                target = guess.get(canon, fallback)
+                return options.index(target) if target in options else 0
+
+            wc1, wc2 = st.columns(2)
+            with wc1:
+                ticker_col = st.selectbox(
+                    "Ticker / Symbol column (or Name, if no ticker exists)", options,
+                    index=_default_index("ticker", guess.get("name")), key=f"map_ticker_{f.name}_{f.size}",
+                )
+                name_col = st.selectbox(
+                    "Name column", options, index=_default_index("name"), key=f"map_name_{f.name}_{f.size}",
+                )
+            with wc2:
+                shares_col = st.selectbox(
+                    "Shares / Quantity owned column", options,
+                    index=_default_index("shares_owned"), key=f"map_shares_{f.name}_{f.size}",
+                )
+                cost_col = st.selectbox(
+                    "Cost column (avg cost per share, or total cost)", options,
+                    index=_default_index("avg_cost", guess.get("cost_total")),
+                    key=f"map_cost_{f.name}_{f.size}",
+                )
+            cost_is_total = st.checkbox(
+                "That cost column is a TOTAL, not per-share — divide by quantity to get avg cost",
+                value=("avg_cost" not in guess and "cost_total" in guess),
+                key=f"map_costtotal_{f.name}_{f.size}",
+            )
+
+            file_rows = _build_rows_from_mapping(df, ticker_col, name_col, shares_col, cost_col, cost_is_total)
+            combined_rows.extend(file_rows)
+            if ticker_col == NONE_OPTION:
+                st.error(f"**{f.name}**: pick a Ticker (or Name) column — nothing was loaded from this file yet.")
+            else:
+                st.caption(f"→ {len(file_rows)} holding(s) will be loaded from this file with the mapping above.")
+            sig_parts.append((f.name, f.size, ticker_col, name_col, shares_col, cost_col, cost_is_total))
+            st.divider()
+
+        csv_sig = tuple(sig_parts)
         if st.session_state.get("_last_csv_sig") != csv_sig:
-            import pandas as pd
-            combined_rows = []
-            any_placeholder_tickers = False
-            for f in uploaded_csvs:
-                df = pd.read_csv(f)
-                file_rows, matched, used_name_as_ticker = _import_csv(df)
-                combined_rows.extend(file_rows)
-                with st.expander(f"🔍 Raw preview: {f.name} ({len(df)} rows, {len(df.columns)} columns)"):
-                    st.write("Detected columns:", list(df.columns))
-                    st.write("Mapped columns → our fields:", matched)
-                    st.dataframe(df.head(5), use_container_width=True)
-                if not matched or ("ticker" not in matched and "name" not in matched):
-                    st.error(
-                        f"**{f.name}**: couldn't find a ticker/symbol OR name column — got no "
-                        f"holdings from this file. Its columns are: "
-                        f"{', '.join(str(c) for c in df.columns)}. Rename a column to 'ticker' "
-                        "or 'symbol' and re-upload."
-                    )
-                elif not file_rows:
-                    st.warning(f"**{f.name}**: matched a column, but every row was empty.")
-                else:
-                    st.caption(f"→ Loaded {len(file_rows)} holding(s) from **{f.name}**.")
-                    if used_name_as_ticker:
-                        any_placeholder_tickers = True
             st.session_state["holdings_rows"] = combined_rows
             st.session_state["_last_csv_sig"] = csv_sig
             if combined_rows:
-                st.success(f"Loaded {len(combined_rows)} holding(s) from {len(uploaded_csvs)} file(s).")
-            if any_placeholder_tickers:
-                st.warning(
-                    "One or more files had no ticker/symbol column — only investment names. "
-                    "I've put the name in the Ticker column as a placeholder for those rows; "
-                    "please replace each with its real ticker (e.g. 'NVDA' for NVIDIA) in the "
-                    "table below so prices and analysis work correctly."
-                )
+                st.success(f"Loaded {len(combined_rows)} holding(s) from {len(uploaded_csvs)} file(s) below.")
 
 with upload_tab2:
     st.caption(
@@ -380,23 +427,31 @@ edited_df = st.data_editor(
     num_rows="dynamic",
     use_container_width=True,
     column_config={
-        "type": st.column_config.SelectboxColumn(options=["equity", "etf"]),
-        "price": st.column_config.NumberColumn("Price", disabled=True, format="%.4f"),
-        "chg_today_pct": st.column_config.NumberColumn("Today", disabled=True, format="%+.2f%%"),
-        "chg_week_pct": st.column_config.NumberColumn("This Week", disabled=True, format="%+.2f%%"),
-        "shares_owned": st.column_config.NumberColumn("Shares Owned", min_value=0.0, format="%.4f"),
-        "avg_cost": st.column_config.NumberColumn("Avg Cost", min_value=0.0, format="%.4f"),
-        "market_value": st.column_config.NumberColumn("Value", disabled=True, format="%.2f"),
-        "gain_value": st.column_config.NumberColumn("Gain (£/$/etc)", disabled=True, format="%+.2f"),
-        "gain_pct": st.column_config.NumberColumn("Gain %", disabled=True, format="%+.2f%%"),
+        "ticker": st.column_config.TextColumn("📄 Ticker"),
+        "name": st.column_config.TextColumn("📄 Name"),
+        "currency": st.column_config.TextColumn("📄 Currency"),
+        "exchange": st.column_config.TextColumn("📄 Exchange"),
+        "sector": st.column_config.TextColumn("📄 Sector"),
+        "region": st.column_config.TextColumn("📄 Region"),
+        "notes": st.column_config.TextColumn("📄 Notes"),
+        "type": st.column_config.SelectboxColumn("📄 Type", options=["equity", "etf"]),
+        "shares_owned": st.column_config.NumberColumn("📄 Shares Owned", min_value=0.0, format="%.4f"),
+        "avg_cost": st.column_config.NumberColumn("📄 Avg Cost", min_value=0.0, format="%.4f"),
+        "price": st.column_config.NumberColumn("🌐 Price", disabled=True, format="%.4f"),
+        "chg_today_pct": st.column_config.NumberColumn("🌐 Today", disabled=True, format="%+.2f%%"),
+        "chg_week_pct": st.column_config.NumberColumn("🌐 This Week", disabled=True, format="%+.2f%%"),
+        "market_value": st.column_config.NumberColumn("🌐 Value", disabled=True, format="%.2f"),
+        "gain_value": st.column_config.NumberColumn("🌐 Gain (£/$/etc)", disabled=True, format="%+.2f"),
+        "gain_pct": st.column_config.NumberColumn("🌐 Gain %", disabled=True, format="%+.2f%%"),
     },
     key="holdings_editor",
 )
 st.caption(
-    "Today / This Week = the stock's own price move (market performance). "
-    "Value / Gain = your position, based on Shares Owned × Avg Cost you enter — shown in "
-    "each stock's own currency, not converted to GBP. Price/Today/Week/Value/Gain are "
-    "computed live and not saved; Shares Owned and Avg Cost ARE saved with your holdings."
+    "📄 = your data (typed in or uploaded) — Ticker, Name, Shares Owned, Avg Cost, etc. are "
+    "saved with your holdings. 🌐 = fetched live from Yahoo Finance every time you open the "
+    "app (Price, Today/This Week % move, Value, Gain) — never saved, always current. Value/"
+    "Gain combine both: your 📄 Shares Owned × Avg Cost against the 🌐 live price, shown in "
+    "each stock's own currency, not converted to GBP."
 )
 
 col1, col2 = st.columns([1, 4])
